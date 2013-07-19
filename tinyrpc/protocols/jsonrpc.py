@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .. import RPCBatchProtocol, RPCRequest, RPCResponse, RPCErrorResponse,\
-               InvalidRequestError, MethodNotFoundError, ServerError,\
+from .. import RPCBatchProtocol, RPCRequest, RPCResponse, RPCErrorResponse, \
+               InvalidRequestError, MethodNotFoundError, ServerError, \
                InvalidReplyError, RPCError, RPCBatchRequest, RPCBatchResponse
 
 import json
@@ -104,6 +104,9 @@ def _get_code_and_message(error):
 
 
 class JSONRPCRequest(RPCRequest):
+    def __init__(self, encoder=json.JSONEncoder):
+        self._encoder = encoder
+
     def error_respond(self, error):
         if not self.unique_id:
             return None
@@ -142,13 +145,16 @@ class JSONRPCRequest(RPCRequest):
         return jdata
 
     def serialize(self):
-        return json.dumps(self._to_dict())
+        return json.dumps(self._to_dict(), cls=self._encoder)
 
 
 class JSONRPCBatchRequest(RPCBatchRequest):
+    def __init__(self, encoder=json.JSONEncoder):
+        self._encoder = encoder
+
     def create_batch_response(self):
         if self._expects_response():
-            return JSONRPCBatchResponse()
+            return JSONRPCBatchResponse(encoder=self._encoder)
 
     def _expects_response(self):
         for request in self:
@@ -160,12 +166,16 @@ class JSONRPCBatchRequest(RPCBatchRequest):
         return False
 
     def serialize(self):
-        return json.dumps([req._to_dict() for req in self])
+        return json.dumps([req._to_dict() for req in self], cls=self._encoder)
 
 
 class JSONRPCBatchResponse(RPCBatchResponse):
+    def __init__(self, encoder=json.JSONEncoder):
+        self._encoder = encoder
+
     def serialize(self):
-        return json.dumps([resp._to_dict() for resp in self if resp != None])
+        return json.dumps([resp._to_dict() for resp in self if resp != None],
+                          cls=self._encoder)
 
 
 class JSONRPCProtocol(RPCBatchProtocol):
@@ -180,20 +190,21 @@ class JSONRPCProtocol(RPCBatchProtocol):
     def __init__(self, *args, **kwargs):
         super(JSONRPCProtocol, self).__init__(*args, **kwargs)
         self._id_counter = 0
+        self._encoder = kwargs.pop('encoder', json.JSONEncoder)
 
     def _get_unique_id(self):
         self._id_counter += 1
         return self._id_counter
 
     def create_batch_request(self, requests=None):
-        return JSONRPCBatchRequest(requests or [])
+        return JSONRPCBatchRequest(requests or [], encoder=self._encoder)
 
     def create_request(self, method, args=None, kwargs=None, one_way=False):
         if args and kwargs:
             raise InvalidRequestError('Does not support args and kwargs at '\
                                       'the same time')
 
-        request = JSONRPCRequest()
+        request = JSONRPCRequest(encoder=self._encoder)
 
         if not one_way:
             request.unique_id = self._get_unique_id()
