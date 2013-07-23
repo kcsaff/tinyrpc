@@ -7,20 +7,21 @@ from .. import RPCBatchProtocol, RPCRequest, RPCResponse, RPCErrorResponse, \
 
 import json
 
+
 class FixedErrorMessageMixin(object):
     def __init__(self, *args, **kwargs):
         if not args:
             args = [self.message]
+        self._encoder = kwargs.pop('encoder', json.JSONEncoder)
         super(FixedErrorMessageMixin, self).__init__(*args, **kwargs)
 
     def error_respond(self):
-        response = JSONRPCErrorResponse()
+        response = JSONRPCErrorResponse(encoder=self._encoder)
 
         response.error = self.message
         response.unique_id = None
         response._jsonrpc_error_code = self.jsonrpc_error_code
         return response
-
 
 
 class JSONRPCParseError(FixedErrorMessageMixin, InvalidRequestError):
@@ -54,6 +55,10 @@ class JSONRPCServerError(FixedErrorMessageMixin, InvalidRequestError):
 
 
 class JSONRPCSuccessResponse(RPCResponse):
+    def __init__(self, encoder=json.JSONEncoder):
+        super(JSONRPCSuccessResponse, self).__init__()
+        self._encoder = encoder
+
     def _to_dict(self):
         return {
             'jsonrpc': JSONRPCProtocol.JSON_RPC_VERSION,
@@ -62,10 +67,14 @@ class JSONRPCSuccessResponse(RPCResponse):
         }
 
     def serialize(self):
-        return json.dumps(self._to_dict())
+        return json.dumps(self._to_dict(), cls=self._encoder)
 
 
 class JSONRPCErrorResponse(RPCErrorResponse):
+    def __init__(self, encoder=json.JSONEncoder):
+        super(JSONRPCErrorResponse, self).__init__()
+        self._encoder = encoder
+
     def _to_dict(self):
         return {
             'jsonrpc': JSONRPCProtocol.JSON_RPC_VERSION,
@@ -77,7 +86,7 @@ class JSONRPCErrorResponse(RPCErrorResponse):
         }
 
     def serialize(self):
-        return json.dumps(self._to_dict())
+        return json.dumps(self._to_dict(), cls=self._encoder)
 
 
 def _get_code_and_message(error):
@@ -112,7 +121,7 @@ class JSONRPCRequest(RPCRequest):
         if not self.unique_id:
             return None
 
-        response = JSONRPCErrorResponse()
+        response = JSONRPCErrorResponse(encoder=self._encoder)
 
         code, msg = _get_code_and_message(error)
 
@@ -122,7 +131,7 @@ class JSONRPCRequest(RPCRequest):
         return response
 
     def respond(self, result):
-        response = JSONRPCSuccessResponse()
+        response = JSONRPCSuccessResponse(encoder=self._encoder)
 
         if not self.unique_id:
             return None
@@ -242,12 +251,12 @@ class JSONRPCProtocol(RPCBatchProtocol):
             )
 
         if 'error' in rep:
-            response = JSONRPCErrorResponse()
+            response = JSONRPCErrorResponse(encoder=self._encoder)
             error = rep['error']
             response.error = error['message']
             response._jsonrpc_error_code = error['code']
         else:
-            response = JSONRPCSuccessResponse()
+            response = JSONRPCSuccessResponse(encoder=self._encoder)
             response.result = rep.get('result', None)
 
         response.unique_id = rep['id']
@@ -258,21 +267,21 @@ class JSONRPCProtocol(RPCBatchProtocol):
         try:
             req = json.loads(data)
         except Exception as e:
-            raise JSONRPCParseError()
+            raise JSONRPCParseError(encoder=self._encoder)
 
         if isinstance(req, list):
             # batch request
-            requests = JSONRPCBatchRequest()
+            requests = JSONRPCBatchRequest(encoder=self._encoder)
             for subreq in req:
                 try:
                     requests.append(self._parse_subrequest(subreq))
                 except RPCError as e:
                     requests.append(e)
                 except Exception as e:
-                    requests.append(JSONRPCInvalidRequestError())
+                    requests.append(JSONRPCInvalidRequestError(encoder=self._encoder))
 
             if not requests:
-                raise JSONRPCInvalidRequestError()
+                raise JSONRPCInvalidRequestError(encoder=self._encoder)
             return requests
         else:
             return self._parse_subrequest(req)
@@ -280,15 +289,15 @@ class JSONRPCProtocol(RPCBatchProtocol):
     def _parse_subrequest(self, req):
         for k in req.iterkeys():
             if not k in self._ALLOWED_REQUEST_KEYS:
-                raise JSONRPCInvalidRequestError()
+                raise JSONRPCInvalidRequestError(encoder=self._encoder)
 
         if req.get('jsonrpc', None) != self.JSON_RPC_VERSION:
-            raise JSONRPCInvalidRequestError()
+            raise JSONRPCInvalidRequestError(encoder=self._encoder)
 
         if not isinstance(req['method'], basestring):
-            raise JSONRPCInvalidRequestError()
+            raise JSONRPCInvalidRequestError(encoder=self._encoder)
 
-        request = JSONRPCRequest()
+        request = JSONRPCRequest(encoder=self._encoder)
         request.method = str(req['method'])
         request.unique_id = req.get('id', None)
 
@@ -299,6 +308,6 @@ class JSONRPCProtocol(RPCBatchProtocol):
             elif isinstance(params, dict):
                 request.kwargs = req['params']
             else:
-                raise JSONRPCInvalidParamsError()
+                raise JSONRPCInvalidParamsError(encoder=self._encoder)
 
         return request

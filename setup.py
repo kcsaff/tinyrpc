@@ -9,7 +9,7 @@ def read(fname):
 
 setup(
     name='tinyrpc-etherios',
-    version='0.6.1',
+    version='0.6.2',
     description='A small, modular, transport and protocol neutral RPC '
                 'library that, among other things, supports JSON-RPC and zmq.',
     long_description=read('README.rst'),
