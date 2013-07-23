@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from json.encoder import JSONEncoder
+from tinyrpc import RPCErrorResponse
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+import datetime
 import pytest
 
-from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
-from tinyrpc import RPCErrorResponse
 
 
 @pytest.fixture(params=['jsonrpc'])
@@ -13,6 +15,22 @@ def protocol(request):
         return JSONRPCProtocol()
 
     raise RuntimeError('Bad protocol name in test case')
+
+
+@pytest.fixture
+def protocol_with_custom_encoder():
+
+    class DatetimeJSONEncoder(JSONEncoder):
+        """JSON Encoder with support for serializing a few additional types"""
+
+        def default(self, o):
+            """Add in encoding for additional types here (see python docs)"""
+            if isinstance(o, datetime.datetime):
+                return o.strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                return JSONEncoder.default(self, o)
+
+    return JSONRPCProtocol(encoder=DatetimeJSONEncoder)
 
 
 def test_protocol_returns_strings(protocol):
@@ -58,3 +76,10 @@ def test_parses_error_response(protocol):
     parsed = protocol.parse_reply(err_rep.serialize())
 
     assert hasattr(parsed, 'error')
+
+
+def test_custom_encoder(protocol_with_custom_encoder):
+    req = protocol_with_custom_encoder.create_request(
+                'foo', {'hello': datetime.datetime(2008, 6, 22, 9, 10, 11)})
+    req.serialize()
+

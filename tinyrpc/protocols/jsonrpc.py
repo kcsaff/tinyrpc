@@ -105,6 +105,7 @@ def _get_code_and_message(error):
 
 class JSONRPCRequest(RPCRequest):
     def __init__(self, encoder=json.JSONEncoder):
+        super(JSONRPCRequest, self).__init__()
         self._encoder = encoder
 
     def error_respond(self, error):
@@ -150,6 +151,7 @@ class JSONRPCRequest(RPCRequest):
 
 class JSONRPCBatchRequest(RPCBatchRequest):
     def __init__(self, encoder=json.JSONEncoder):
+        super(JSONRPCBatchRequest, self).__init__()
         self._encoder = encoder
 
     def create_batch_response(self):
@@ -188,9 +190,9 @@ class JSONRPCProtocol(RPCBatchProtocol):
     _ALLOWED_REQUEST_KEYS = sorted(['id', 'jsonrpc', 'method', 'params'])
 
     def __init__(self, *args, **kwargs):
+        self._encoder = kwargs.pop('encoder', json.JSONEncoder)
         super(JSONRPCProtocol, self).__init__(*args, **kwargs)
         self._id_counter = 0
-        self._encoder = kwargs.pop('encoder', json.JSONEncoder)
 
     def _get_unique_id(self):
         self._id_counter += 1
